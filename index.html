@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <title>צ'אט לימודים חכם</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; display: flex; justify-content: center; }
+    .chat-container { width: 100%; max-width: 750px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: flex; flex-direction: column; height: 85vh; }
+    .header-area { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    h2 { margin: 0; color: #333; }
+    .new-chat-btn { background: #6c757d; color: white; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold; }
+    .new-chat-btn:hover { background: #5a6268; }
+    .chat-box { flex: 1; border: 1px solid #e1e4e8; border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 15px; background: #fafbfc; display: flex; flex-direction: column; gap: 12px; }
+    .message { max-width: 85%; padding: 12px 16px; border-radius: 10px; line-height: 1.6; word-wrap: break-word; }
+    .user { background: #e3f2fd; align-self: flex-start; border-bottom-right-radius: 2px; }
+    .assistant { background: #ffffff; align-self: flex-end; border: 1px solid #e1e4e8; border-bottom-left-radius: 2px; }
+    .assistant pre { background: #f6f8fa; padding: 10px; border-radius: 6px; overflow-x: auto; direction: ltr; text-align: left; }
+    .assistant code { font-family: Consolas, monospace; }
+    .token-info { font-size: 12px; color: #666; margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; direction: ltr; text-align: left; }
+    .input-group { display: flex; gap: 10px; }
+    input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; outline: none; }
+    input[type="text"]:focus { border-color: #007bff; }
+    button.send-btn { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; }
+    button.send-btn:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="header-area">
+      <h2>צ'אט לימודים חכם</h2>
+      <button class="new-chat-btn" onclick="startNewChat()">שיחה חדשה</button>
+    </div>
+    <div id="chat" class="chat-box"></div>
+    <div class="input-group">
+      <input id="message" type="text" placeholder="הקלד את הודעתך כאן..." />
+      <button class="send-btn" onclick="sendMessage()">שלח</button>
+    </div>
+  </div>
+
+  <script>
+    let sessionId = localStorage.getItem("chat_session_id");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("chat_session_id", sessionId);
+    }
+
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("message");
+
+    function appendMessage(role, content, isMarkdown = false, usage = null) {
+      const div = document.createElement("div");
+      const isUser = (role === "user" || role === "You" || role === "אתה");
+      div.className = `message ${isUser ? "user" : "assistant"}`;
+      
+      const displayName = isUser ? "אתה" : "עוזר";
+
+      let htmlContent = "";
+      if (!isUser && isMarkdown) {
+        htmlContent = `<b>${displayName}:</b><br>` + marked.parse(content);
+      } else {
+        htmlContent = `${displayName}: ${content}`;
+      }
+
+      if (usage) {
+        htmlContent += `<div class="token-info">Tokens - Prompt: ${usage.prompt_tokens}, Completion: ${usage.completion_tokens}, Total: ${usage.total_tokens}</div>`;
+      }
+
+      div.innerHTML = htmlContent;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function startNewChat() {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("chat_session_id", sessionId);
+      chat.innerHTML = "";
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch("http://localhost:8000/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId })
+        });
+        const data = await res.json();
+        if (data.history && Array.isArray(data.history)) {
+          chat.innerHTML = "";
+          data.history.forEach(msg => {
+            appendMessage(msg.role, msg.content, true);
+          });
+        }
+      } catch (err) {
+        console.error("שגיאה בטעינת היסטוריה", err);
+      }
+    }
+
+    async function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      appendMessage("user", text, false);
+      input.value = "";
+
+      try {
+        // פנייה ל-endpoint החדש /ask כנדרש במטלה
+        const response = await fetch("http://localhost:8000/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message: text })
+        });
+
+        if (!response.ok) throw new Error("שגיאה בתקשורת מול השרת");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let assistantText = "";
+        let tokenUsage = null;
+        
+        const assistantDiv = document.createElement("div");
+        assistantDiv.className = "message assistant";
+        chat.appendChild(assistantDiv);
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const parts = chunk.split("\n\n");
+
+          for (const part of parts) {
+            if (!part.startsWith("data:")) continue;
+            const payload = part.slice(5).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              const obj = JSON.parse(payload);
+              if (obj.usage) {
+                tokenUsage = obj.usage;
+              }
+              if (obj.content) {
+                assistantText += obj.content;
+              }
+              
+              let renderHTML = `<b>עוזר:</b><br>` + marked.parse(assistantText);
+              if (tokenUsage) {
+                renderHTML += `<div class="token-info">Tokens - Prompt: ${tokenUsage.prompt_tokens}, Completion: ${tokenUsage.completion_tokens}, Total: ${tokenUsage.total_tokens}</div>`;
+              }
+              assistantDiv.innerHTML = renderHTML;
+              chat.scrollTop = chat.scrollHeight;
+            } catch (err) {}
+          }
+        }
+      } catch (err) {
+        appendMessage("system", "שגיאה בחיבור לשרת.", false);
+      }
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    window.onload = loadHistory;
+  </script>
+</body>
+</html>
