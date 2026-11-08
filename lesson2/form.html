@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>טופס מילוי חכם מתעודת זהות</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 30px; display: flex; justify-content: center; }
+    .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 450px; }
+    h2 { margin-top: 0; color: #333; }
+    .smart-section { background: #eef6ff; border: 1px dashed #007bff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input[type="text"], input[type="file"] { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
+    button:disabled { background: #6c757d; cursor: wait; }
+    #status { margin-top: 8px; font-size: 0.9em; color: #555; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>טופס פרטים אישיים</h2>
+
+  <div class="smart-section">
+    <label for="idPhoto">העלאת צילום תעודת זהות:</label>
+    <input type="file" id="idPhoto" accept="image/jpeg,image/png">
+    <button type="button" id="smartBtn" onclick="uploadAndFill()">השלמה חכמה מהתמונה</button>
+    <div id="status"></div>
+  </div>
+
+  <form id="detailsForm">
+    <div class="form-group">
+      <label for="id_number">מספר זהות:</label>
+      <input type="text" id="id_number">
+    </div>
+    <div class="form-group">
+      <label for="first_name">שם פרטי:</label>
+      <input type="text" id="first_name">
+    </div>
+    <div class="form-group">
+      <label for="last_name">שם משפחה:</label>
+      <input type="text" id="last_name">
+    </div>
+    <div class="form-group">
+      <label for="birth_date">תאריך לידה:</label>
+      <input type="text" id="birth_date">
+    </div>
+  </form>
+</div>
+
+<script>
+  async function uploadAndFill() {
+    const fileInput = document.getElementById("idPhoto");
+    const status = document.getElementById("status");
+    const btn = document.getElementById("smartBtn");
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+      status.textContent = "יש לבחור קובץ תמונה תחילה.";
+      return;
+    }
+
+    const file = fileInput.files[0];
+    btn.disabled = true;
+    status.textContent = "מעבד תמונה...";
+
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/extract-id", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_base64: base64, mime_type: file.type })
+      });
+
+      if (!res.ok) throw new Error("שגיאה בעיבוד הנתונים בשרת");
+
+      const data = await res.json();
+      if (data.id_number) document.getElementById("id_number").value = data.id_number;
+      if (data.first_name) document.getElementById("first_name").value = data.first_name;
+      if (data.last_name) document.getElementById("last_name").value = data.last_name;
+      if (data.birth_date) document.getElementById("birth_date").value = data.birth_date;
+
+      status.textContent = "הנתונים הושלמו בהצלחה!";
+    } catch (err) {
+      status.textContent = "אירעה שגיאה: " + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+</script>
+
+</body>
+</html>

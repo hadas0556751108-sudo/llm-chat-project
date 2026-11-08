@@ -7,8 +7,13 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
+from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# טעינת קובץ env מתיקיית האם
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(dotenv_path=env_path, override=True)
+
 
 app = FastAPI(title="Chat API")
 app.add_middleware(

@@ -1,0 +1,14 @@
+{
+
+  "manifest_version": 3,
+  "name": "מילוי טופס חכם מתז",
+  "version": "1.0",
+  "description": "תוסף למילוי אוטומטי של שדות טופס מתוך תעודת זהות",
+  "permissions": ["activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
