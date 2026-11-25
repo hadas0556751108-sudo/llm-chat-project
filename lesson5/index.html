@@ -1,0 +1,162 @@
+
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Forum Moderator</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f1f5f9;
+            padding: 40px 15px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px #00000010;
+        }
+
+        h1 {
+            color: #1e293b;
+        }
+
+        label {
+            display: block;
+            margin-top: 18px;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px;
+            margin-top: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 15px;
+        }
+
+        button {
+            width: 100%;
+            padding: 13px;
+            margin-top: 20px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>פורום AI</h1>
+    <p>מערכת חכמה לבדיקת תגובות לפני פרסום</p>
+
+    <label>נושא הפוסט</label>
+    <input id="subject"
+           value="איך מקטינים עלויות טוקנים?">
+
+    <label>קוד משתמש</label>
+    <input id="userId" type="number" value="1">
+
+    <label>תגובה חדשה</label>
+    <textarea id="newPost" rows="5"
+              placeholder="כתבו תגובה..."></textarea>
+
+    <button id="submitButton" onclick="submitPost()">
+        שליחת תגובה
+    </button>
+
+    <div id="result">תוצאות הבדיקה יוצגו כאן</div>
+
+</div>
+
+<script>
+    async function submitPost() {
+
+        const result = document.getElementById("result");
+        const button = document.getElementById("submitButton");
+
+        const data = {
+            post_subject: document.getElementById("subject").value,
+            new_post: document.getElementById("newPost").value,
+            userId: Number(document.getElementById("userId").value)
+        };
+
+        if (!data.new_post.trim()) {
+            result.textContent = "יש להזין תגובה";
+            return;
+        }
+
+        button.disabled = true;
+
+        result.textContent =
+            "התגובה בבדיקה... אם נדרש אישור אנושי, יש לבדוק בטרמינל.";
+
+        try {
+
+            const response = await fetch("/api/post", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                throw new Error("Server error");
+            }
+
+            const output = await response.json();
+
+            result.textContent =
+                "קטגוריה: " + output.category + "\n" +
+                "רמת ביטחון: " + output.confidence + "\n" +
+                "סטטוס: " +
+                (output.approve ? "אושר" : "נדחה") + "\n" +
+                "תגובה לפרסום: " +
+                (output.rewritten_new_post || "-") + "\n" +
+                "הודעה: " + output.user_message + "\n" +
+                "החלטה לחסום: " +
+                (output.block_user ? "כן" : "לא");
+
+            result.style.background =
+                output.approve ? "#dcfce7" : "#fee2e2";
+
+        } catch (error) {
+
+            result.textContent = "אירעה שגיאה בשליחת התגובה";
+
+        } finally {
+
+            button.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
